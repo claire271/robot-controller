@@ -1,0 +1,5 @@
+*.dtbo
+*.o
+*.bin
+main
+.git\[old\]/

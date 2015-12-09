@@ -1,0 +1,7 @@
+#!/bin/bash
+cp BB-PID-AUTOTUNER-00A0.dtbo /lib/firmware/
+OUTPUT="$(cat $SLOTS | grep BB-PID-AUTOTUNER | cut -f1 -d":" | tr -d '[[:space:]]')"
+if [ -z "${OUTPUT}" ];
+  then
+    echo BB-PID-AUTOTUNER:00A0 > $SLOTS
+fi

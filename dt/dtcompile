@@ -1,0 +1,2 @@
+#!/bin/bash
+dtc -O dtb -o BB-PID-AUTOTUNER-00A0.dtbo -b 0 -@ BB-PID-AUTOTUNER-00A0.dts

@@ -1,0 +1,6 @@
+#!/bin/bash
+OUTPUT="$(cat $SLOTS | grep BB-PID-AUTOTUNER | cut -f1 -d":" | tr -d '[[:space:]]')"
+if [ -n "${OUTPUT}" ];
+  then
+    echo "-${OUTPUT}" > $SLOTS
+fi
