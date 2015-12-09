@@ -30,6 +30,7 @@ void catch_SIGINT(int sig);
 void cleanup();
 void* pidloop(void* arg);
 void* ioloop(void* arg);
+void setPID(float Kp, float Ki, float Kd);
 
 static void *sharedMem;
 
@@ -37,33 +38,34 @@ static unsigned int *sharedMem_int;
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 
+//UI variables
+unsigned int ui_freq = 20;      //(hz)
+
 //IO variables
+unsigned int io_freq = 50;      //(hz)
 int pos_in = 0;
+int pid_range = 200 * 500;      //The pwm output range from the center to one side (in 5ns increments)
 
 //PID variables
+//PID implementation adapted from the Arduino PID library
 unsigned int pid_freq = 50;    //(hz)
-unsigned int io_freq = 50;      //(hz)
-unsigned int ui_freq = 20;      //(hz)
-int pid_range = 200 * 500;      //The pwm output range from the center to one side (in 5ns increments)
-float pid_output = 0;           //Range from -1 to 1
+
+float pid_output = 0;
 float pid_input = 0;
 float pid_setpoint = 0;
-float pid_p = 1;
-float pid_d = 0;
-float pid_i = 2;
-float pid_oldin = 0;
-float pid_iacc = 0;
+float disp_setpoint = 0;
 
-//PID implementation adapted from the Arduino PID library
+float disp_kp;
+float disp_ki;
+float disp_kd;
+float pid_kp;
+float pid_ki;
+float pid_kd;
 
-float kp = 1.0;
-float ki = 1.0 / 50;
-float kd = 0.0 * 50;
-
-float iterm = 0;
-float last_in = 0;
-float qmin = -1;
-float qmax = 1;
+float pid_iterm = 0;
+float pid_prev_in = 0;
+float pid_qmin = -1;
+float pid_qmax = 1;
 
 //Testing variables
 
@@ -105,15 +107,103 @@ int main (void)
   start_color();			/* Start color 			*/
   init_pair(1, COLOR_CYAN, COLOR_BLACK);
   init_pair(2, COLOR_GREEN, COLOR_BLACK);
+  init_pair(3, COLOR_WHITE, COLOR_BLACK);
+  init_pair(4, COLOR_WHITE, COLOR_BLUE);
+  init_pair(5, COLOR_BLUE, COLOR_WHITE);
+  init_pair(6, COLOR_RED, COLOR_WHITE);
+  cbreak();
+  noecho();
+  nodelay(stdscr,TRUE);
+  keypad(stdscr,TRUE);
+
+  //UI Variables
+  int focus = 0;
+  int editing = 0;
+  float tmp_edit = 0;
 
   for(;;) {
-    //Print out current count
+    //Reading input
+    int c = getch();
+    switch(c) {
+    case '\n':
+      editing = !editing;
+      if(!editing) {
+        setPID(disp_kp,disp_ki,disp_kd);
+        pid_setpoint = disp_setpoint;
+      }
+      else {
+        tmp_edit = 0;
+      }
+      break;
+    case KEY_UP:
+      focus--;
+      break;
+    case KEY_DOWN:
+      focus++;
+      break;
+    case 127:
+      tmp_edit /= 10;
+      break;
+    }
+    if(c >= '0' && c <= '9') {
+      tmp_edit = tmp_edit * 10 + (c - '0');
+    }
+    if(editing) {
+      switch(focus) {
+      case 0:
+        disp_kp = tmp_edit;
+        break;
+      case 1:
+        disp_ki = tmp_edit;
+        break;
+      case 2:
+        disp_kd = tmp_edit;
+        break;
+      case 3:
+        disp_setpoint = tmp_edit;
+        break;
+      }
+    }
+
+    //Displaying output
     pthread_mutex_lock( &mutex1 );
+    clear();
+    attron(COLOR_PAIR(3));
+    mvprintw(0,0,"P");
+    mvprintw(1,0,"I");
+    mvprintw(2,0,"D");
+    mvprintw(3,0,"SETPOINT");
+
+    if(focus == 0) {
+      if(editing) attron(COLOR_PAIR(6));
+      else attron(COLOR_PAIR(5));
+    }
+    else attron(COLOR_PAIR(4));
+    mvprintw(0,2,"%f",disp_kp);
+    if(focus == 1) {
+      if(editing) attron(COLOR_PAIR(6));
+      else attron(COLOR_PAIR(5));
+    }
+    else attron(COLOR_PAIR(4));
+    mvprintw(1,2,"%f",disp_ki);
+    if(focus == 2) {
+      if(editing) attron(COLOR_PAIR(6));
+      else attron(COLOR_PAIR(5));
+    }
+    else attron(COLOR_PAIR(4));
+    mvprintw(2,2,"%f",disp_kd);
+    if(focus == 3) {
+      if(editing) attron(COLOR_PAIR(6));
+      else attron(COLOR_PAIR(5));
+    }
+    else attron(COLOR_PAIR(4));
+    mvprintw(3,9,"%f",disp_setpoint);
+    
     attron(COLOR_PAIR(1));
-    mvprintw(0,0,"POS IN:  %i\n",pos_in);
+    mvprintw(5,0,"PID ERR: %f\n",pid_setpoint - pos_in/10000.f);
     attron(COLOR_PAIR(2));
-    mvprintw(1,0,"PID OUT: %f\n",pid_output);
-    attroff(COLOR_PAIR(1));
+    mvprintw(6,0,"PID OUT: %f\n",pid_output);
+    //attroff(COLOR_PAIR(1));
     pthread_mutex_unlock( &mutex1 );
 
     refresh();
@@ -145,24 +235,27 @@ void* pidloop(void *arg) {
 
   //Other variables
 
+  //Initializing PID
+  setPID(1,2,0);
+
   for(;;) {
     pthread_mutex_lock( &mutex1 );
     pid_input = pos_in / 10000.f;
 
     float error = pid_setpoint - pid_input;
 
-    iterm += ki * error;
-    if(iterm > qmax) iterm = qmax;
-    if(iterm < qmin) iterm = qmin;
+    pid_iterm += pid_ki * error;
+    if(pid_iterm > pid_qmax) pid_iterm = pid_qmax;
+    if(pid_iterm < pid_qmin) pid_iterm = pid_qmin;
 
-    float dinput = pid_input - last_in;
+    float dinput = pid_input - pid_prev_in;
 
-    pid_output = kp * error + iterm - kd * dinput;
+    pid_output = pid_kp * error + pid_iterm - pid_kd * dinput;
 
-    if(pid_output > qmax) pid_output = qmax;
-    if(pid_output < qmin) pid_output = qmin;
+    if(pid_output > pid_qmax) pid_output = pid_qmax;
+    if(pid_output < pid_qmin) pid_output = pid_qmin;
 
-    last_in = pid_input;
+    pid_prev_in = pid_input;
 
     pthread_mutex_unlock( &mutex1 );
 
@@ -223,3 +316,12 @@ void catch_SIGINT(int sig) {
   exit(0);
 }
 
+void setPID(float Kp, float Ki, float Kd) {
+  disp_kp = Kp;
+  disp_ki = Ki;
+  disp_kd = Kd;
+
+  pid_kp = Kp;
+  pid_ki = Ki / pid_freq;
+  pid_kd = Kd * pid_freq;
+}
