@@ -28,7 +28,7 @@ START:
 	// clearing pwm generation start register
 	XOR     r13, r13, r13
 	// setting pwm value to center
-	MOV     r14, 1000/5 * 1000      //(1500uS)
+	MOV     r14, 1000/5 * 1500      //(1500uS)
 
 MAIN_LOOP:
 	//Outputing cycle counter value

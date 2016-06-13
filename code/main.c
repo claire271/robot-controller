@@ -54,6 +54,8 @@ float pid_output = 0;
 float pid_input = 0;
 float pid_setpoint = 0;
 float disp_setpoint = 0;
+float pid_auto_sp1 = 0;
+float pid_auto_sp2 = 1;
 
 float disp_kp;
 float disp_ki;
@@ -173,6 +175,8 @@ int main (void)
     mvprintw(1,0,"I");
     mvprintw(2,0,"D");
     mvprintw(3,0,"SETPOINT");
+    mvprintw(8,0,"PID AUTOTUNE SETPOINT 1");
+    mvprintw(9,0,"PID AUTOTUNE SETPOINT 2");
 
     if(focus == 0) {
       if(editing) attron(COLOR_PAIR(6));
@@ -198,12 +202,21 @@ int main (void)
     }
     else attron(COLOR_PAIR(4));
     mvprintw(3,9,"%f",disp_setpoint);
+    if(focus == 4) {
+      if(editing) attron(COLOR_PAIR(6));
+      else attron(COLOR_PAIR(5));
+    }
+    else attron(COLOR_PAIR(4));
+    mvprintw(3,9,"%f",disp_setpoint);
     
     attron(COLOR_PAIR(1));
     mvprintw(5,0,"PID ERR: %f\n",pid_setpoint - pos_in/10000.f);
     attron(COLOR_PAIR(2));
     mvprintw(6,0,"PID OUT: %f\n",pid_output);
     //attroff(COLOR_PAIR(1));
+
+    
+
     pthread_mutex_unlock( &mutex1 );
 
     refresh();
