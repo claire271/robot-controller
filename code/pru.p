@@ -3,6 +3,21 @@
 
 #include "pru.hp"
 
+//Macro for each PWM pin needed
+//Macro uses r14 for temp storage
+//r15 is the length since cycle start
+.macro  PIN_CLR
+.mparam addr, pin
+    //Read source and get pwm length
+	LBCO    r14, CONST_PRUSHAREDRAM, addr, 4
+    //Clear this specific pwm pin if time reached
+    QBGT    NO_CLR_PIN, r15, r14
+CLR_PIN:
+    CLR     r30, pin
+NO_CLR_PIN:
+.endm
+    
+//Main program start
 START:
 	// Enable OCP master port
 	LBCO    r0, CONST_PRUCFG, 4, 4
@@ -21,18 +36,14 @@ START:
 	SET     R1, 3
 	SBBO	r1, r0, 0, 4
 
-	// clearing encoder counter
-	XOR     r5, r5, r5
-	// clearing old state register
-	XOR     r6, r6, r6
-
 	//Clearing cycle start register
 	XOR     r13, r13, r13
 
-    //r14 temp
-
     //Set all pins high before first cycle
     SET     r30, 5
+    SET     r30, 3
+    SET     r30, 1
+    SET     r30, 2
 
 MAIN_LOOP:
 	//Getting cycle counter value
@@ -42,17 +53,11 @@ MAIN_LOOP:
     //R15 contains the cycles since the cylce started
 	SUB     r15, r11, r13
 
-    //Read source and get pwm length
-	LBCO    r14, CONST_PRUSHAREDRAM, 16, 4
-    //Clear this specific pwm pin if time reached
-    QBGT    NO_CLR_PIN1, r15, r14
-CLR_PIN1:
-    CLR     r30, 5
-NO_CLR_PIN1:
-
-    //Debug output
-	SBCO    r14, CONST_PRUSHAREDRAM, 0, 4
-
+    //Check pins to see if time passed
+    PIN_CLR 16, 5
+    PIN_CLR 20, 3
+    PIN_CLR 24, 1
+    PIN_CLR 28, 2
 
     //Set total cycle time
     MOV     r14, 1000/5 * 1000      //1000uS
@@ -61,6 +66,9 @@ NO_CLR_PIN1:
 SET_ALL:
     //Set all pins high in preperation for next cycle
     SET     r30, 5
+    SET     r30, 3
+    SET     r30, 1
+    SET     r30, 2
     //Add on the time elapsed in the prev cycle time register
     ADD     r13, r13, r14
 NO_SET_ALL:
@@ -68,7 +76,12 @@ NO_SET_ALL:
 	QBA     MAIN_LOOP
 	//End loop
 
-    /*
+	// Halt the processor (shouldn't ever be here)
+	HALT
+
+    //End actual code
+
+    /* Old stuff
 	QBGT	NO_END_PULSE, r15, r14
 END_PULSE:
 	CLR	    r30, 0
@@ -129,6 +142,3 @@ C_END:
 	//Moving current pin state to register for comparison next cycle
 	MOV     r6, r9
     */
-
-	// Halt the processor (shouldn't ever be here)
-	HALT
