@@ -25,19 +25,50 @@ START:
 	XOR     r5, r5, r5
 	// clearing old state register
 	XOR     r6, r6, r6
-	// clearing pwm generation start register
+
+	//Clearing cycle start register
 	XOR     r13, r13, r13
-	// setting pwm value to center
-	MOV     r14, 1000/5 * 1500      //(1500uS)
+
+    //r14 temp
+
+    //Set all pins high before first cycle
+    SET     r30, 5
 
 MAIN_LOOP:
-	//Outputing cycle counter value
+	//Getting cycle counter value
 	MOV	    r12, PRU0_CTRL + CTRL
 	LBBO	r11, r12, 0x0C, 4
-
-	//R11 contains current cycle
+	//R11 contains current cycle, R13 contains previous cycle
+    //R15 contains the cycles since the cylce started
 	SUB     r15, r11, r13
 
+    //Read source and get pwm length
+	LBCO    r14, CONST_PRUSHAREDRAM, 16, 4
+    //Clear this specific pwm pin if time reached
+    QBGT    NO_CLR_PIN1, r15, r14
+CLR_PIN1:
+    CLR     r30, 5
+NO_CLR_PIN1:
+
+    //Debug output
+	SBCO    r14, CONST_PRUSHAREDRAM, 0, 4
+
+
+    //Set total cycle time
+    MOV     r14, 1000/5 * 1000      //1000uS
+    //Set all if total cycle time reached
+    QBGT    NO_SET_ALL, r15, r14
+SET_ALL:
+    //Set all pins high in preperation for next cycle
+    SET     r30, 5
+    //Add on the time elapsed in the prev cycle time register
+    ADD     r13, r13, r14
+NO_SET_ALL:
+
+	QBA     MAIN_LOOP
+	//End loop
+
+    /*
 	QBGT	NO_END_PULSE, r15, r14
 END_PULSE:
 	CLR	    r30, 0
@@ -57,6 +88,8 @@ END_CYCLE:
 	LBCO    r14, CONST_PRUSHAREDRAM, 12, 4
 	SET	    r30, 0
 	//SUB     r13, r13, r12
+
+    //Setting previous cycle count from current
 	MOV	    r13, r11
 NO_END_CYCLE:
 
@@ -95,9 +128,7 @@ C_END:
 	
 	//Moving current pin state to register for comparison next cycle
 	MOV     r6, r9
-
-	QBA     MAIN_LOOP
-	//End loop
+    */
 
 	// Halt the processor (shouldn't ever be here)
 	HALT

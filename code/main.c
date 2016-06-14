@@ -21,7 +21,10 @@
 //Measured in ints (4 bytes), so actually offset by 0x2000
 #define OFFSET_SHAREDRAM 0x800
 #define OFFSET_POS_IN OFFSET_SHAREDRAM + 0
-#define OFFSET_PWM_OUT OFFSET_SHAREDRAM + 3
+#define OFFSET_PWM0_OUT OFFSET_SHAREDRAM + 4
+#define OFFSET_PWM1_OUT OFFSET_SHAREDRAM + 5
+#define OFFSET_PWM2_OUT OFFSET_SHAREDRAM + 6 
+#define OFFSET_PWM3_OUT OFFSET_SHAREDRAM + 7
 
 #define PRUSS0_SHARED_DATARAM    4
 
@@ -210,7 +213,8 @@ int main (void)
     mvprintw(3,9,"%f",disp_setpoint);
     
     attron(COLOR_PAIR(1));
-    mvprintw(5,0,"PID ERR: %f\n",pid_setpoint - pos_in/10000.f);
+    //mvprintw(5,0,"PID ERR: %f\n",pid_setpoint - pos_in/10000.f);
+    mvprintw(5,0,"POS IN: %i\n",pos_in);
     attron(COLOR_PAIR(2));
     mvprintw(6,0,"PID OUT: %f\n",pid_output);
     //attroff(COLOR_PAIR(1));
@@ -294,12 +298,12 @@ void* ioloop(void *arg) {
   sharedMem_int = (unsigned int*) sharedMem;
 
   //Initializing pwm output
-  sharedMem_int[OFFSET_PWM_OUT] = 200 * 1500;
+  sharedMem_int[OFFSET_PWM0_OUT] = 1000/5 * 500;
 
   for(;;) {
     pthread_mutex_lock( &mutex1 );
     pos_in = sharedMem_int[OFFSET_POS_IN];
-    sharedMem_int[OFFSET_PWM_OUT] = 1500 * 200 + pid_output * pid_range;
+    sharedMem_int[OFFSET_PWM0_OUT] = 1000/5 * 900;
     pthread_mutex_unlock( &mutex1 );
 
     //Timer loop code
