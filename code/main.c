@@ -27,6 +27,8 @@
 #define OFFSET_PWM1_OUT OFFSET_SHAREDRAM + 5
 #define OFFSET_PWM2_OUT OFFSET_SHAREDRAM + 6 
 #define OFFSET_PWM3_OUT OFFSET_SHAREDRAM + 7
+#define OFFSET_LEFT_IN OFFSET_SHAREDRAM + 9
+#define OFFSET_RIGHT_IN OFFSET_SHAREDRAM + 8
 
 #define PRUSS0_SHARED_DATARAM    4
 
@@ -51,8 +53,11 @@ unsigned int ui_freq = 50;      //(hz)
 unsigned int io_freq = 50;      //(hz)
 int pos_in = 0;
 int pid_range = 200 * 500;      //The pwm output range from the center to one side (in 5ns increments)
+
 float left_out = 0;
 float right_out = 0;
+int left_in = 0;
+int right_in = 0;
 
 //PID variables
 //PID implementation adapted from the Arduino PID library
@@ -196,6 +201,9 @@ int main (void)
 
     //Prepare for next cycle
     prev = curr;
+
+    //Debug output
+    printf("%i %i\n",left_in,right_in);
 
     /*
     //Reading input
@@ -377,6 +385,10 @@ void* ioloop(void *arg) {
   sharedMem_int[OFFSET_PWM2_OUT] = 0;
   sharedMem_int[OFFSET_PWM3_OUT] = 0;
 
+  //Initializing encoders
+  sharedMem_int[OFFSET_LEFT_IN] = 0;
+  sharedMem_int[OFFSET_RIGHT_IN] = 0;
+
   for(;;) {
     //pthread_mutex_lock( &mutex1 );
     //pos_in = sharedMem_int[OFFSET_POS_IN];
@@ -384,6 +396,7 @@ void* ioloop(void *arg) {
     //pthread_mutex_unlock( &mutex1 );
 
     pthread_mutex_lock( &mutex2 );
+    //OUTPUT
     //Limiting range from -1 to 1
     if(left_out > 1) left_out = 1;
     if(left_out < -1) left_out = -1;
@@ -405,6 +418,9 @@ void* ioloop(void *arg) {
       sharedMem_int[OFFSET_PWM2_OUT] = 0;
       sharedMem_int[OFFSET_PWM3_OUT] = 1000/5 * 1000 * -right_out;
     }
+    //INPUT
+    left_in = sharedMem_int[OFFSET_LEFT_IN];
+    right_in = -sharedMem_int[OFFSET_RIGHT_IN];
     pthread_mutex_unlock( &mutex2 );
 
     //Timer loop code
