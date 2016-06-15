@@ -1,0 +1,1 @@
+socat -d -d pty,raw,echo=0,link=/root/robot-controller/server/serial0 pty,raw,echo=0,link=/root/robot-controller/server/serial1

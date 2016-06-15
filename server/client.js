@@ -1,5 +1,7 @@
 var socket = io();
 
+socket.on('disconnect', disable);
+
 var enabled = false;
 
 //Init document elements
