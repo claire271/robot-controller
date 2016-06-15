@@ -15,6 +15,54 @@ enabled_status.value = false;
 document.getElementById("enable_button").onclick = enable;
 document.getElementById("disable_button").onclick = disable;
 
+//Setting up canvas
+var canvas = document.getElementById("lidar_out");
+var ctx = canvas.getContext("2d");
+
+//LIDAR visualization constants
+const WIDTH = 800;
+const HEIGHT = 600;
+const SCALE = 2;
+const GRIDW = 100;
+
+//LIDAR recieve stuff
+socket.on('lidar data', function(points) {
+  console.log("HI");
+
+  //Background
+  ctx.fillStyle = "#000000";
+  ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+  //Background lines
+  ctx.strokeStyle = "#3F0000";
+  for(var i = HEIGHT - GRIDW/SCALE;i >= 0;i -= GRIDW/SCALE) {
+    ctx.moveTo(0,i);
+    ctx.lineTo(WIDTH,i);
+  }
+  for(var i = GRIDW/SCALE;i < WIDTH/2;i += GRIDW/SCALE) {
+    ctx.moveTo(WIDTH/2 + i,0);
+    ctx.lineTo(WIDTH/2 + i,HEIGHT);
+    ctx.moveTo(WIDTH/2 - i,0);
+    ctx.lineTo(WIDTH/2 - i,HEIGHT);
+  }
+  ctx.stroke();
+
+  ctx.strokeStyle = "#3F003F"
+  ctx.beginPath();
+  ctx.moveTo(WIDTH/2,0);
+  ctx.lineTo(WIDTH/2,HEIGHT);
+  ctx.moveTo(0,HEIGHT);
+  ctx.lineTo(WIDTH,HEIGHT);
+  ctx.stroke();
+
+
+  ctx.fillStyle = "#00FF00";
+  for(var i = 0;i < points.length;i++) {
+    ctx.fillRect(Math.round(WIDTH/2 + points[i].x/SCALE - .5),Math.round(HEIGHT - points[i].y/SCALE - .5),1,1);
+  }
+});
+
+
 //Initiailizing gamepad stuff
 var gamepad_count;
 

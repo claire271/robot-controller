@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
+#include <termios.h>
 #include <time.h>
 #include <sys/time.h>
 #include <signal.h>
@@ -17,6 +18,7 @@
 #include <pruss/pruss_intc_mapping.h>	 
 
 #define PRU_NUM 0
+#define PORT "../server/serial1" 
 
 //Measured in ints (4 bytes), so actually offset by 0x2000
 #define OFFSET_SHAREDRAM 0x800
@@ -40,16 +42,17 @@ static void *sharedMem;
 static unsigned int *sharedMem_int;
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
 
 //UI variables
-unsigned int ui_freq = 20;      //(hz)
+unsigned int ui_freq = 50;      //(hz)
 
 //IO variables
 unsigned int io_freq = 50;      //(hz)
 int pos_in = 0;
 int pid_range = 200 * 500;      //The pwm output range from the center to one side (in 5ns increments)
-float left_out = -.5;
-float right_out = -.5;
+float left_out = 0;
+float right_out = 0;
 
 //PID variables
 //PID implementation adapted from the Arduino PID library
@@ -73,8 +76,6 @@ float pid_iterm = 0;
 float pid_prev_in = 0;
 float pid_qmin = -1;
 float pid_qmax = 1;
-
-//Testing variables
 
 int main (void)
 {
@@ -109,9 +110,28 @@ int main (void)
   gettimeofday(&tv,NULL);
   unsigned long old_time = 1000000 * tv.tv_sec + tv.tv_usec;
 
+  //Setting up serial output
+  struct termios tio;
+  int tty_fd;
+  
+  memset(&tio,0,sizeof(tio));
+  tio.c_iflag=0;
+  tio.c_oflag=0;
+  tio.c_cflag=CS8|CREAD|CLOCAL;           // 8n1, see termios.h for more information
+  tio.c_lflag=0;
+  tio.c_cc[VMIN]=1;
+  tio.c_cc[VTIME]=5;
+  
+  tty_fd=open(PORT, O_RDWR | O_NONBLOCK);      
+  cfsetospeed(&tio,B115200);            // 115200 baud
+  cfsetispeed(&tio,B115200);            // 115200 baud
+  
+  tcsetattr(tty_fd,TCSANOW,&tio);
+
   //Setting up ncurses
-  initscr();			/* Start curses mode 		  */
-  start_color();			/* Start color 			*/
+  //initscr();			/* Start curses mode 		  */
+  //start_color();			/* Start color 			*/
+  /*
   init_pair(1, COLOR_CYAN, COLOR_BLACK);
   init_pair(2, COLOR_GREEN, COLOR_BLACK);
   init_pair(3, COLOR_WHITE, COLOR_BLACK);
@@ -127,8 +147,57 @@ int main (void)
   int focus = 0;
   int editing = 0;
   float tmp_edit = 0;
+  */
 
+  printf("INIT Finished\n");
+
+  unsigned char prev = 0x00;
+  int index = 0;
+  unsigned short values[2];
   for(;;) {
+    unsigned char curr = 0x00;
+    int count = read(tty_fd,&curr,1);
+
+    //Looking for timeout
+    gettimeofday(&tv,NULL);
+    unsigned long cur_time = 1000000 * tv.tv_sec + tv.tv_usec;
+    if(cur_time - old_time > 100000) {
+      pthread_mutex_lock( &mutex2 );
+      left_out = 0.0f;
+      right_out = 0.0f;
+      pthread_mutex_unlock( &mutex2 );
+    }
+    if(count <= 0) continue;
+    //curr should be valid now
+
+    //Restart frame if end found
+    if(prev == 0xFF && curr == 0xFF) {
+      //Restart timeout timer
+      old_time = cur_time;
+
+      prev = 0x00;
+      index = 0;
+      //printf(".");
+      //fflush(stdout);
+      pthread_mutex_lock( &mutex2 );
+      left_out = ((int)(values[0]) - 0x8000)/1000.0f;
+      right_out = ((int)(values[1]) - 0x8000)/1000.0f;
+      //printf("%f %f ",left_out,righo_out);
+      pthread_mutex_unlock( &mutex2 );
+      continue;
+    }
+
+    //Normal processing
+    if(index % 2) {
+      unsigned short value = curr << 8 | prev;
+      values[index >> 1] = value;
+    }
+    index++;
+
+    //Prepare for next cycle
+    prev = curr;
+
+    /*
     //Reading input
     int c = getch();
     switch(c) {
@@ -226,6 +295,8 @@ int main (void)
     pthread_mutex_unlock( &mutex1 );
 
     refresh();
+    */
+    /*
     //Timer loop code
     gettimeofday(&tv,NULL);
     unsigned long cur_time = 1000000 * tv.tv_sec + tv.tv_usec;
@@ -233,6 +304,7 @@ int main (void)
       usleep(old_time + 1000000/ui_freq - cur_time);
     }
     old_time += 1000000/ui_freq;
+    */
   }
   return 0;
 }
@@ -243,7 +315,7 @@ void cleanup() {
   prussdrv_exit ();
 
   //Cleanup ncurses
-  endwin();
+  //endwin();
 }
 
 void* pidloop(void *arg) {
@@ -299,14 +371,19 @@ void* ioloop(void *arg) {
   prussdrv_map_prumem(PRUSS0_SHARED_DATARAM, &sharedMem);
   sharedMem_int = (unsigned int*) sharedMem;
 
-  //Initializing pwm output
-  sharedMem_int[OFFSET_PWM0_OUT] = 1000/5 * 500;
+  //Initializing pwm values
+  sharedMem_int[OFFSET_PWM0_OUT] = 0;
+  sharedMem_int[OFFSET_PWM1_OUT] = 0;
+  sharedMem_int[OFFSET_PWM2_OUT] = 0;
+  sharedMem_int[OFFSET_PWM3_OUT] = 0;
 
   for(;;) {
-    pthread_mutex_lock( &mutex1 );
+    //pthread_mutex_lock( &mutex1 );
     //pos_in = sharedMem_int[OFFSET_POS_IN];
-    sharedMem_int[OFFSET_PWM0_OUT] = 1000/5 * 500;
+    //sharedMem_int[OFFSET_PWM0_OUT] = 1000/5 * 500;
+    //pthread_mutex_unlock( &mutex1 );
 
+    pthread_mutex_lock( &mutex2 );
     //Limiting range from -1 to 1
     if(left_out > 1) left_out = 1;
     if(left_out < -1) left_out = -1;
@@ -328,7 +405,7 @@ void* ioloop(void *arg) {
       sharedMem_int[OFFSET_PWM2_OUT] = 0;
       sharedMem_int[OFFSET_PWM3_OUT] = 1000/5 * 1000 * -right_out;
     }
-    pthread_mutex_unlock( &mutex1 );
+    pthread_mutex_unlock( &mutex2 );
 
     //Timer loop code
     gettimeofday(&tv,NULL);

@@ -43,7 +43,7 @@ START:
     SET     r30, 5
     SET     r30, 3
     SET     r30, 1
-    SET     r30, 2
+    SET     r30, 14
 
 MAIN_LOOP:
 	//Getting cycle counter value
@@ -57,7 +57,7 @@ MAIN_LOOP:
     PIN_CLR 16, 5
     PIN_CLR 20, 3
     PIN_CLR 24, 1
-    PIN_CLR 28, 2
+    PIN_CLR 28, 14
 
     //Set total cycle time
     MOV     r14, 1000/5 * 1000      //1000uS
@@ -68,9 +68,13 @@ SET_ALL:
     SET     r30, 5
     SET     r30, 3
     SET     r30, 1
-    SET     r30, 2
+    SET     r30, 14
     //Add on the time elapsed in the prev cycle time register
-    ADD     r13, r13, r14
+    //ADD     r13, r13, r14
+    //Reset cycle counter
+    XOR     r11, r11, r11
+	MOV	    r12, PRU0_CTRL + CTRL
+	SBBO	r11, r12, 0x0C, 4
 NO_SET_ALL:
 
 	QBA     MAIN_LOOP
