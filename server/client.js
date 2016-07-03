@@ -15,6 +15,10 @@ enabled_status.value = false;
 document.getElementById("enable_button").onclick = enable;
 document.getElementById("disable_button").onclick = disable;
 
+//Setting up encoder outputs
+var left_enc = document.getElementById("left_enc");
+var right_enc = document.getElementById("right_enc");
+
 //Setting up canvas
 var canvas = document.getElementById("lidar_out");
 var ctx = canvas.getContext("2d");
@@ -62,6 +66,10 @@ socket.on('lidar data', function(points) {
   }
 });
 
+socket.on('encoder data', function(encoders) {
+  left_enc.value = encoders.left;
+  right_enc.value = encoders.right;
+});
 
 //Initiailizing gamepad stuff
 var gamepad_count;

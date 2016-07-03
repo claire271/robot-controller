@@ -20,6 +20,12 @@
 #define PRU_NUM 0
 #define PORT "../server/serial1" 
 
+//Virtual serial port
+int tty_fd;
+
+//Buffer for output
+unsigned char buf[6];
+
 //Measured in ints (4 bytes), so actually offset by 0x2000
 #define OFFSET_SHAREDRAM 0x800
 #define OFFSET_POS_IN OFFSET_SHAREDRAM + 0
@@ -117,7 +123,6 @@ int main (void)
 
   //Setting up serial output
   struct termios tio;
-  int tty_fd;
   
   memset(&tio,0,sizeof(tio));
   tio.c_iflag=0;
@@ -182,12 +187,11 @@ int main (void)
 
       prev = 0x00;
       index = 0;
-      //printf(".");
-      //fflush(stdout);
+
       pthread_mutex_lock( &mutex2 );
+      //Reading input
       left_out = ((int)(values[0]) - 0x8000)/1000.0f;
       right_out = ((int)(values[1]) - 0x8000)/1000.0f;
-      //printf("%f %f ",left_out,righo_out);
       pthread_mutex_unlock( &mutex2 );
       continue;
     }
@@ -201,9 +205,6 @@ int main (void)
 
     //Prepare for next cycle
     prev = curr;
-
-    //Debug output
-    printf("%i %i\n",left_in,right_in);
 
     /*
     //Reading input
@@ -421,6 +422,26 @@ void* ioloop(void *arg) {
     //INPUT
     left_in = sharedMem_int[OFFSET_LEFT_IN];
     right_in = -sharedMem_int[OFFSET_RIGHT_IN];
+
+    //Writing output
+    buf[0] = 0x00;
+    *((int*)(&(buf[1]))) = left_in;
+    buf[5] = 0x00;
+    write(tty_fd,buf,6);
+    
+    buf[0] = 0x00;
+    *((int*)(&(buf[1]))) = right_in;
+    buf[5] = 0x00;
+    write(tty_fd,buf,6);
+    
+    buf[0] = 0xFF;
+    buf[1] = 0xFF;
+    buf[2] = 0xFF;
+    buf[3] = 0xFF;
+    buf[4] = 0xFF;
+    buf[5] = 0xFF;
+    write(tty_fd,buf,6);
+
     pthread_mutex_unlock( &mutex2 );
 
     //Timer loop code

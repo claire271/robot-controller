@@ -6,10 +6,17 @@ var SerialPort = require('serialport');
 
 //Serial to/from the C & ASM PRU controller
 var serial = new SerialPort.SerialPort("./serial0", {
-  baudRate: 115200
+  baudRate: 115200,
+  parser: SerialPort.parsers.byteDelimiter([0x00,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x00])
 });
 serial.on('data',function(data) {
-  console.log("HI");
+  var left_in = (data[3] << 24 | data[2] << 16 | data[1] << 8 | data[0]) & 0xFFFFFFFF;
+  var right_in = (data[9] << 24 | data[8] << 16 | data[7] << 8 | data[6]) & 0xFFFFFFFF;
+
+  var encoders = {};
+  encoders.left = left_in;
+  encoders.right = right_in;
+  io.emit('encoder data',encoders);
 });
 var outBuf = Buffer.alloc(6);
 
@@ -91,4 +98,5 @@ function processJoystick(joystick) {
   serial.write(outBuf, function(error) {
     serial.flush();
   });
+  //console.log("bye");
 }
