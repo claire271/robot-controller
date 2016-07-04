@@ -3,6 +3,7 @@ var app = require('express')();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 var SerialPort = require('serialport');
+var ekf_slam = require('./ekf_slam').ekf_slam;
 
 //Serial to/from the C & ASM PRU controller
 var serial = new SerialPort.SerialPort("./serial0", {
@@ -26,6 +27,10 @@ const H = 100;
 const IW = 640;
 const IH = 480;
 
+//Initializing slam
+//var slam = new ekf_slam();
+
+/*
 //Serial to/from the LIDAR
 var serial2 = new SerialPort.SerialPort("/dev/ttyS2", {
   baudRate: 115200,
@@ -49,6 +54,7 @@ serial2.on('data',function(data) {
 
   io.emit('lidar data',points);
 });
+*/
 
 //Web routing information
 app.get('/', function(req, res){

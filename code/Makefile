@@ -13,14 +13,14 @@ pru = pru
 project = main
 
 LIB_PATH = .
-LIBRARIES = pthread prussdrv ncurses
+LIBRARIES = pthread prussdrv ncurses m breezyslam
 INCLUDES = -I. ${LIB_PATH}
 
-SOURCES =  main.c
+SOURCES =  main.cpp
 
-EXTRA_DEFINE =
+EXTRA_DEFINE = -ggdb -I ~/BreezySLAM/cpp
 CCCFLAGS = $(EXTRA_DEFINE)
-CC = gcc
+CC = g++
 CFLAGS = $(EXTRA_DEFINE)
 PASM = pasm
 
@@ -28,8 +28,8 @@ all : $(pru) $(project)
 pru : $(pru)
 project: $(project)
 
-$(project) : $(project:%=%.c)
-	$(CC) $(CFLAGS) -c -o $@.o $@.c
+$(project) : $(project:%=%.cpp)
+	$(CC) $(CFLAGS) -c -o $@.o $@.cpp
 	$(CC) $@.o $(LIB_PATH:%=-L%) $(LIBRARIES:%=-l%) -o $@
 
 clean :
