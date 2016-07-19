@@ -401,8 +401,8 @@ void* ioloop(void *arg) {
     //Limiting range from -1 to 1
     if(left_out > 1) left_out = 1;
     if(left_out < -1) left_out = -1;
-    sharedMem_int[OFFSET_PWM2_OUT] = 1000/5 * 1000 * ((left_out >= 0) ? left_out : -left_out);
-    sharedMem_int[OFFSET_PWM3_OUT] = (left_out >= 0) ? 0 : 1000/5 * 1000;
+    sharedMem_int[OFFSET_PWM3_OUT] = 1000/5 * 1000 * ((left_out >= 0) ? left_out : -left_out);
+    sharedMem_int[OFFSET_PWM2_OUT] = (left_out >= 0) ? 0 : 1000/5 * 1000;
     /*
     if(left_out > 0) {
       sharedMem_int[OFFSET_PWM0_OUT] = 1000/5 * 1000 * left_out;
@@ -415,8 +415,8 @@ void* ioloop(void *arg) {
     */
     if(right_out > 1) right_out = 1;
     if(right_out < -1) right_out = -1;
-    sharedMem_int[OFFSET_PWM0_OUT] = 1000/5 * 1000 * ((right_out >= 0) ? right_out : -right_out);
-    sharedMem_int[OFFSET_PWM1_OUT] = (right_out >= 0) ? 1000/5 * 1000 : 0;
+    sharedMem_int[OFFSET_PWM1_OUT] = 1000/5 * 1000 * ((right_out >= 0) ? right_out : -right_out);
+    sharedMem_int[OFFSET_PWM0_OUT] = (right_out >= 0) ? 1000/5 * 1000 : 0;
     /*
     if(right_out > 0) {
       sharedMem_int[OFFSET_PWM2_OUT] = 1000/5 * 1000 * right_out;

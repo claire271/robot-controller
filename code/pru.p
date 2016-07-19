@@ -80,6 +80,13 @@ START:
     SET     r30, 1
     SET     r30, 14
 
+    //Initialize motor controls
+    XOR     r14, r14, r14
+    SBCO    r14, CONST_PRUSHAREDRAM, 16, 4
+    SBCO    r14, CONST_PRUSHAREDRAM, 20, 4
+    SBCO    r14, CONST_PRUSHAREDRAM, 24, 4
+    SBCO    r14, CONST_PRUSHAREDRAM, 28, 4
+
 MAIN_LOOP:
 	//Getting cycle counter value
 	MOV	    r12, PRU0_CTRL + CTRL
