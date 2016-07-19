@@ -13,28 +13,15 @@
 #include <ncurses.h>
 #include <pthread.h>
 
-#include <iostream>
-#include <vector>
-
-#include "Position.hpp"
-#include "Laser.hpp"
-#include "WheeledRobot.hpp"
-#include "Velocities.hpp"
-#include "algorithms.hpp"
-
 // Driver header file
 #include <pruss/prussdrv.h>
 #include <pruss/pruss_intc_mapping.h>	 
 
 #define PRU_NUM 0
 #define PORT "../server/serial1" 
-#define LIDAR_PORT "/dev/ttyS2"
 
 //Virtual serial port
 int tty_fd;
-
-//Lidar variables
-unsigned int lidar_freq = 5;
 
 //Buffer for output
 unsigned char buf[6];
@@ -56,8 +43,6 @@ void catch_SIGINT(int sig);
 void cleanup();
 void* pidloop(void* arg);
 void* ioloop(void* arg);
-void* lidarloop(void* arg);
-void* lidarreadloop(void* arg);
 void setPID(float Kp, float Ki, float Kd);
 
 static void *sharedMem;
@@ -130,12 +115,6 @@ int main (void)
 
   pthread_t iothread;
   pthread_create(&iothread, NULL, &ioloop, NULL);
-
-  pthread_t lidarthread;
-  pthread_create(&lidarthread, NULL, &lidarloop, NULL);
-
-  pthread_t lidarreadthread;
-  pthread_create(&lidarreadthread, NULL, &lidarreadloop, NULL);
 
   //Setting up timer stuff
   struct timeval tv;
@@ -474,256 +453,6 @@ void* ioloop(void *arg) {
     old_time += 1000000/io_freq;
   }
   return 0;
-}
-
-//Lidar constants
-const int VD = 633;
-const int H = 100;
-const int IW = 640;
-const int IH = 480;
-
-// SinglePositionSLAM params: gives us a nice-size map
-static const int MAP_SIZE_PIXELS        = 800;
-static const double MAP_SIZE_METERS     =  32;
-
-// Class for Mines verison of URG-04LX Lidar -----------------------------------
-
-class MinesURG04LX : public URG04LX
-{
-    
-public:
-    
-    MinesURG04LX(void): URG04LX(
-        70,          // detectionMargin
-        145)         // offsetMillimeters
-    {
-    }
-};
-
-// Class for MinesRover custom robot -------------------------------------------
-
-class Rover : WheeledRobot
-{
-    
-public:
-    
-    Rover() : WheeledRobot(
-         77,     // wheelRadiusMillimeters
-        165)     // halfAxleLengthMillimeters
-    {
-    }
-    
-    Velocities computeVelocities(long * odometry, Velocities & velocities)
-    {  
-        return WheeledRobot::computeVelocities(
-            odometry[0], 
-            odometry[1], 
-            odometry[2]);
-    }
-
-protected:    
-    
-    void extractOdometry(
-        double timestamp, 
-        double leftWheelOdometry, 
-        double rightWheelOdometry, 
-        double & timestampSeconds, 
-        double & leftWheelDegrees, 
-        double & rightWheelDegrees)
-    {        
-        // Convert microseconds to seconds, ticks to angles        
-        timestampSeconds = timestamp / 1e6;
-        leftWheelDegrees = ticksToDegrees(leftWheelOdometry);
-        rightWheelDegrees = ticksToDegrees(rightWheelOdometry);
-    }
-    
-    void descriptorString(char * str)
-    {
-        sprintf(str, "ticks_per_cycle=%d", this->TICKS_PER_CYCLE);
-    }
-        
-private:
-    
-    double ticksToDegrees(double ticks)
-    {
-        return ticks * (180. / this->TICKS_PER_CYCLE);
-    }
-    
-    static const int TICKS_PER_CYCLE = 2000;
-};
-
-// Helpers ----------------------------------------------------------------
-
-int coords2index(double x,  double y)
-{    
-    return y * MAP_SIZE_PIXELS + x;
-}
-
-
-int mm2pix(double mm)
-{
-    return (int)(mm / (MAP_SIZE_METERS * 1000. / MAP_SIZE_PIXELS));  
-}
-
-int distances[IW];
-
-void* lidarreadloop(void *arg) {
-  //Setting up serial output
-  struct termios tio;
-  int tty_fd2;
-  
-  memset(&tio,0,sizeof(tio));
-  tio.c_iflag=0;
-  tio.c_oflag=0;
-  tio.c_cflag=CS8|CREAD|CLOCAL;           // 8n1, see termios.h for more information
-  tio.c_lflag=0;
-  tio.c_cc[VMIN]=1;
-  tio.c_cc[VTIME]=5;
-  
-  tty_fd2=open(LIDAR_PORT, O_RDWR | O_NONBLOCK);      
-  cfsetospeed(&tio,B115200);            // 115200 baud
-  cfsetispeed(&tio,B115200);            // 115200 baud
-  
-  tcsetattr(tty_fd2,TCSANOW,&tio);
-
-  int index = 0;
-  for(;;) {
-    unsigned char curr = 0x00;
-    int count = read(tty_fd2,&curr,1);
-    if(count <= 0) continue;
-    //curr should be valid now
-
-    //Process entire frame
-    if(curr == 0xFF || index == IW) {
-      if(index == IW) {
-        printf("%i\n",index);
-      }
-      index = 0;
-      continue;
-    }
-
-    //Process and store data for the frame
-    if(curr < 254) {
-      float y = VD * H * 1.0 / curr;
-      float x = y * (index - IW/2) / VD;
-      distances[index] = (int)hypotf(x,y) * 10;
-    }
-    else {
-      distances[index] = 10000 * 10;
-    }
-
-    //Prepare for next iteration
-    index++;
-  }
-}
-
-void* lidarloop(void *arg) {
-  //Need to replace with real conditions at some point
-  //Setting up timer stuff
-  struct timeval tv;
-  gettimeofday(&tv,NULL);
-  unsigned long old_time = 1000000 * tv.tv_sec + tv.tv_usec;
-
-  //Initialize SLAM
-  int random_seed = 2373455;
-  bool use_odometry = false;
-
-  // Build a robot model in case we want odometry
-  Rover robot = Rover();
-    
-  // Create a byte array to receive the computed maps
-  unsigned char * mapbytes = new unsigned char[MAP_SIZE_PIXELS * MAP_SIZE_PIXELS];
-  
-  // Create SLAM object
-  //MinesURG04LX laser;
-  Laser laser = Laser(IW,5,45,10000,0,30);
-  SinglePositionSLAM * slam = random_seed ?
-    (SinglePositionSLAM*)new RMHC_SLAM(laser, MAP_SIZE_PIXELS, MAP_SIZE_METERS, random_seed) :
-    (SinglePositionSLAM*)new Deterministic_SLAM(laser, MAP_SIZE_PIXELS, MAP_SIZE_METERS);
-  
-  // Start with an empty trajectory of positions
-  vector<double *> trajectory;
-
-  for(int i = 0;i < IW;i++) {
-    distances[i] = 10000 * 10;
-  }
-  
-  for(int i = 0;i < 50;i++) {
-    //int * lidar = scans[scanno];
-    
-    // Update with/out odometry
-    if (use_odometry) {
-      //Velocities velocities = robot.computeVelocities(odometries[scanno], velocities);
-      Velocities velocities;
-      slam->update(distances, velocities);            
-    }
-    else {
-      slam->update(distances);  
-    }
-        
-    Position position = slam->getpos();
-    
-    // Add new coordinates to trajectory
-    double * v = new double[2];
-    v[0] = position.x_mm;
-    v[1] = position.y_mm;
-    trajectory.push_back(v);     
-
-    //Inform user of progress
-    printf("SLAM Processed\n");
-    
-    //Timer loop code
-    gettimeofday(&tv,NULL);
-    unsigned long cur_time = 1000000 * tv.tv_sec + tv.tv_usec;
-    if(old_time + 1000000L/lidar_freq > cur_time) {
-      usleep(old_time + 1000000/lidar_freq - cur_time);
-    }
-    old_time += 1000000/lidar_freq;
-  }
-
-  //Debug output
-  // Get final map
-  slam->getmap(mapbytes);
-  
-  // Put trajectory into map as black pixels
-  for (int k=0; k<(int)trajectory.size(); ++k) {        
-    double * v = trajectory[k];
-    
-    int x = mm2pix(v[0]);
-    int y = mm2pix(v[1]);
-    
-    delete v;
-    
-    mapbytes[coords2index(x, y)] = 0;
-  }
-  
-  // Save map and trajectory as PGM file    
-  
-  char filename[100];
-  sprintf(filename, "output.pgm");
-  printf("\nSaving map to file %s\n", filename);
-  
-  FILE * output = fopen(filename, "wt");
-  
-  fprintf(output, "P2\n%d %d 255\n", MAP_SIZE_PIXELS, MAP_SIZE_PIXELS);
-  
-  for (int y=0; y<MAP_SIZE_PIXELS; y++) {
-    for (int x=0; x<MAP_SIZE_PIXELS; x++) {
-      fprintf(output, "%d ", mapbytes[coords2index(x, y)]);
-    }
-    fprintf(output, "\n");
-  }
-    
-  // Clean up
-  if (random_seed) {
-    delete ((RMHC_SLAM *)slam);
-  }
-  else {
-    delete ((Deterministic_SLAM *)slam);
-  }
-
-  delete mapbytes;
-  fclose(output);
 }
 
 void delay(int milliseconds)

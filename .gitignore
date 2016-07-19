@@ -3,3 +3,6 @@
 *.bin
 main
 .git\[old\]/
+node_modules
+serial0
+serial1
