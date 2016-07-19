@@ -80,8 +80,8 @@ function processJoystick(joystick) {
   var xin = joystick.axes[3];
   var yin = -joystick.axes[1];
 
-  xin = xin * xin * xin;
-  yin = yin * yin * yin;
+  xin = xin * Math.abs(xin);
+  yin = yin * Math.abs(yin);
 
   var length = Math.max(Math.abs(xin) + Math.abs(yin),1);
   xin /= length;
